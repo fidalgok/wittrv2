@@ -12,11 +12,10 @@ export default function IndexController(container) {
 }
 
 //register serviceworker
-IndexController.prototype._registerServiceWorker = () => {
+IndexController.prototype._registerServiceWorker = function() {
   var indexController;
-  console.log(this);
+
   indexController = this;
-  console.log(indexController);
 
   if (!navigator.serviceWorker) {
     return;
@@ -24,9 +23,10 @@ IndexController.prototype._registerServiceWorker = () => {
   navigator.serviceWorker
     .register('./sw.js', { scope: '/' })
     .then(reg => {
+      if (!navigator.serviceWorker.controller) return;
       let workerWaiting = reg.waiting;
       let workerActive = reg.active;
-
+      let installingWorker = reg.installing;
       console.log(`--------------------------------------`);
       console.log(`--------------------------------------`);
       console.log(`waiting worker:`);
@@ -37,36 +37,61 @@ IndexController.prototype._registerServiceWorker = () => {
       console.log(workerActive);
       console.log(`--------------------------------------`);
 
-      reg.addEventListener('updatefound', () => {
-        const newWorker = reg.installing;
-        console.log(`--------------------------------------`);
-        console.log(`installing worker:`);
-        console.log(newWorker);
-        console.log(newWorker.state);
-        newWorker.addEventListener('statechange', () => {
-          //state has changed see if it is installed
-          console.log('state changed: ');
-          console.log(newWorker.state);
-          if (newWorker.state == 'installed') {
-            console.log('calling update ready');
-            indexController._updateReady();
-          }
-        });
-      });
-
       //if there's a worker already waiting let's update the user
       if (workerWaiting) {
         console.log(`there's a worker waiting`);
-        indexController._updateReady();
+        indexController._updateReady(workerWaiting);
+        return;
       }
+
+      if (installingWorker) {
+        console.log(`there's a worker installing`);
+        indexController._trackInstalling(installingWorker);
+        return;
+      }
+
+      reg.addEventListener('updatefound', () => {
+        installingWorker = reg.installing;
+        console.log(`--------------------------------------`);
+        console.log(`update found:`);
+        console.log(installingWorker);
+        console.log(installingWorker.state);
+        indexController._trackInstalling(installingWorker);
+        return;
+      });
     })
 
     .catch(err => console.log(err));
+
+  navigator.serviceWorker.addEventListener('controllerchange', function() {
+    //fires when the service worker controlling the page changes
+
+    window.location.reload();
+  });
 };
 
-IndexController.prototype._updateReady = function() {
+IndexController.prototype._trackInstalling = function(installingWorker) {
+  var indexController = this;
+  installingWorker.addEventListener('statechange', () => {
+    //state has changed see if it is installed
+    console.log('state changed: ');
+    console.log(installingWorker.state);
+    if (installingWorker.state == 'installed') {
+      console.log('calling update ready');
+      indexController._updateReady(installingWorker);
+    }
+  });
+};
+
+IndexController.prototype._updateReady = function(worker) {
   var toast = this._toastsView.show('New version available', {
-    buttons: ['whatever']
+    buttons: ['refresh', 'dismiss']
+  });
+
+  toast.answer.then(answer => {
+    if (answer != 'refresh') return;
+    //let service worker know to skip waiting
+    worker.postMessage({ refresh: true });
   });
 };
 

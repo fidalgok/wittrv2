@@ -1,9 +1,9 @@
-const staticCache = 'wittr-static-v3';
+const staticCache = 'wittr-static-v2';
 
 self.addEventListener('install', event => {
   const urlsToCache = [
-    '/',
-    //'js/main.js',
+    '/skeleton',
+    'js/main.js',
     'css/main.css',
     'imgs/icon.png',
     'https://fonts.gstatic.com/s/roboto/v15/2UX7WLTfW3W8TclTUvlFyQ.woff',
@@ -40,15 +40,32 @@ self.addEventListener('fetch', event => {
   // if (event.request.url.match(/.jpg$/)) {
   //   event.respondWith(fetch('/imgs/dr-evil.gif'));
   // }
-  event.respondWith(
-    caches
-      .match(event.request)
-      .then(response => {
-        return response || fetch(event.request);
-      })
+  var requestUrl = new URL(event.request.url);
+  if (requestUrl.origin === location.origin) {
+    if (requestUrl.pathname === '/') {
+      event.respondWith(
+        caches.match('/skeleton').then(response => {
+          return response;
+        })
+      );
+    }
+  } else {
+    event.respondWith(
+      caches
+        .match(event.request)
+        .then(response => {
+          return response || fetch(event.request);
+        })
 
-      .catch(err => {
-        return new Response('Uh oh, that totally failed: ' + err);
-      })
-  );
+        .catch(err => {
+          return new Response('Uh oh, that totally failed: ' + err);
+        })
+    );
+  }
+});
+
+self.addEventListener('message', e => {
+  if (e.data.refresh === true) {
+    self.skipWaiting();
+  }
 });
