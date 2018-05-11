@@ -13,14 +13,61 @@ export default function IndexController(container) {
 
 //register serviceworker
 IndexController.prototype._registerServiceWorker = () => {
-  if (navigator.serviceWorker) {
-    navigator.serviceWorker
-      .register('./sw.js', { scope: '/' })
-      .then(reg => {
-        console.log("I'm registered!");
-      })
-      .catch(err => console.log(err));
+  var indexController;
+  console.log(this);
+  indexController = this;
+  console.log(indexController);
+
+  if (!navigator.serviceWorker) {
+    return;
   }
+  navigator.serviceWorker
+    .register('./sw.js', { scope: '/' })
+    .then(reg => {
+      let workerWaiting = reg.waiting;
+      let workerActive = reg.active;
+
+      console.log(`--------------------------------------`);
+      console.log(`--------------------------------------`);
+      console.log(`waiting worker:`);
+      console.log(workerWaiting);
+      console.log(`--------------------------------------`);
+      console.log(`--------------------------------------`);
+      console.log(`active worker:`);
+      console.log(workerActive);
+      console.log(`--------------------------------------`);
+
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        console.log(`--------------------------------------`);
+        console.log(`installing worker:`);
+        console.log(newWorker);
+        console.log(newWorker.state);
+        newWorker.addEventListener('statechange', () => {
+          //state has changed see if it is installed
+          console.log('state changed: ');
+          console.log(newWorker.state);
+          if (newWorker.state == 'installed') {
+            console.log('calling update ready');
+            indexController._updateReady();
+          }
+        });
+      });
+
+      //if there's a worker already waiting let's update the user
+      if (workerWaiting) {
+        console.log(`there's a worker waiting`);
+        indexController._updateReady();
+      }
+    })
+
+    .catch(err => console.log(err));
+};
+
+IndexController.prototype._updateReady = function() {
+  var toast = this._toastsView.show('New version available', {
+    buttons: ['whatever']
+  });
 };
 
 // open a connection to the server for live updates

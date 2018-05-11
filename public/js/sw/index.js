@@ -3,7 +3,7 @@ const staticCache = 'wittr-static-v3';
 self.addEventListener('install', event => {
   const urlsToCache = [
     '/',
-    'js/main.js',
+    //'js/main.js',
     'css/main.css',
     'imgs/icon.png',
     'https://fonts.gstatic.com/s/roboto/v15/2UX7WLTfW3W8TclTUvlFyQ.woff',
