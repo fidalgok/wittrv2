@@ -2,11 +2,34 @@ import PostsView from './views/Posts';
 import ToastsView from './views/Toasts';
 import idb from 'idb';
 
+function openDatabase() {
+  //if the browser doesn't support service worker
+  //we don't care about having a database
+  if (!navigator.serviceWorker) return Promise.resolve();
+
+  //TODO return a promise for a db called wittr
+  //object store name 'witters'
+  //id as key
+  //index called by-date sorted by time
+
+  return idb.open('wittr', 1, function(upgradeDb) {
+    switch (upgradeDb.oldVersion) {
+      case 0:
+        const witterStore = upgradeDb.createObjectStore('wittrs', {
+          keyPath: 'id'
+        });
+
+        witterStore.createIndex('by-date', 'time');
+    }
+  });
+}
+
 export default function IndexController(container) {
   this._container = container;
   this._postsView = new PostsView(this._container);
   this._toastsView = new ToastsView(this._container);
   this._lostConnectionToast = null;
+  this._dbPromise = openDatabase();
   this._openSocket();
   this._registerServiceWorker();
 }
@@ -145,5 +168,16 @@ IndexController.prototype._openSocket = function() {
 // called when the web socket sends message data
 IndexController.prototype._onSocketMessage = function(data) {
   var messages = JSON.parse(data);
+  this._dbPromise
+    .then(db => {
+      if (!db) return;
+
+      //TODO: put each message into the wittrs object store
+      const tx = db.transaction('wittrs', 'readwrite');
+      const wittrStore = tx.objectStore('wittrs');
+      messages.forEach(message => wittrStore.put(message));
+      return tx.complete;
+    })
+    .then(() => console.log('added messages to wittrstore'));
   this._postsView.addPosts(messages);
 };
