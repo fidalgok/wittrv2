@@ -30,8 +30,11 @@ export default function IndexController(container) {
   this._toastsView = new ToastsView(this._container);
   this._lostConnectionToast = null;
   this._dbPromise = openDatabase();
-  this._openSocket();
   this._registerServiceWorker();
+  var indexController = this;
+  this._showCachedMessages().then(function() {
+    indexController._openSocket();
+  });
 }
 
 //register serviceworker
@@ -180,4 +183,33 @@ IndexController.prototype._onSocketMessage = function(data) {
     })
     .then(() => console.log('added messages to wittrstore'));
   this._postsView.addPosts(messages);
+};
+
+IndexController.prototype._showCachedMessages = function() {
+  var indexController = this;
+
+  return this._dbPromise
+    .then(db => {
+      //if already showing posts or very first load
+      //no point fetching posts from db
+      if (!db || indexController._postsView.showingPosts()) return;
+
+      //TODO: get all of the wittr message objects from indexeddb,
+      //then pass them to: indexControllwer._postsView.addPosts(messages)
+      //in order of date, starting with the latest, return a promise
+      //that does all this, so the websocket won't be opened until done
+      const tx = db.transaction('wittrs');
+      const wittrsStore = tx.objectStore('wittrs');
+      const dateIndex = wittrsStore.index('by-date');
+
+      return dateIndex.getAll();
+    })
+    .then(messages => {
+      if (messages) {
+        messages.sort((a, b) => new Date(b.time) - new Date(a.time));
+        console.log(messages);
+        indexController._postsView.addPosts(messages);
+      }
+      return;
+    });
 };

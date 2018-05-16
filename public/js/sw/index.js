@@ -1,4 +1,4 @@
-const staticCache = 'wittr-static-v2';
+const staticCache = 'wittr-static-v1';
 
 self.addEventListener('install', event => {
   const urlsToCache = [
@@ -48,12 +48,21 @@ self.addEventListener('fetch', event => {
           return response;
         })
       );
+    } else {
+      event.respondWith(
+        caches
+          .match(event.request)
+          .then(response => response || fetch(event.request))
+      );
     }
   } else {
     event.respondWith(
       caches
         .match(event.request)
         .then(response => {
+          if (response) {
+            console.log(response);
+          }
           return response || fetch(event.request);
         })
 
