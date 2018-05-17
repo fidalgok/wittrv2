@@ -1,4 +1,6 @@
-const staticCache = 'wittr-static-v1';
+const staticCache = 'wittr-static-v4';
+const contentImgsCache = 'wittr-content-imgs';
+const allCaches = [staticCache, contentImgsCache];
 
 self.addEventListener('install', event => {
   const urlsToCache = [
@@ -24,7 +26,7 @@ self.addEventListener('activate', event => {
     caches.keys().then(keylist => {
       return Promise.all(
         keylist
-          .filter(key => key.startsWith('wittr-') && key != staticCache)
+          .filter(key => key.startsWith('wittr-') && !allCaches.includes(key))
           .map(key => {
             return caches.delete(key);
           })
@@ -48,30 +50,68 @@ self.addEventListener('fetch', event => {
           return response;
         })
       );
-    } else {
-      event.respondWith(
-        caches
-          .match(event.request)
-          .then(response => response || fetch(event.request))
-      );
     }
-  } else {
-    event.respondWith(
-      caches
-        .match(event.request)
-        .then(response => {
-          if (response) {
-            console.log(response);
-          }
-          return response || fetch(event.request);
-        })
+    // else {
+    //   event.respondWith(
+    //     caches
+    //       .match(event.request)
+    //       .then(response => response || fetch(event.request))
+    //   );
+    // }
+    if (requestUrl.pathname.startsWith('/photos/')) {
+      event.respondWith(servePhoto(event.request));
+      return;
+    }
 
-        .catch(err => {
-          return new Response('Uh oh, that totally failed: ' + err);
-        })
-    );
+    if (requestUrl.pathname.startsWith('/avatars/')) {
+      event.respondWith(serveAvatar(event.request));
+      return;
+    }
   }
+  //else {
+  event.respondWith(
+    caches
+      .match(event.request)
+      .then(response => {
+        if (response) {
+          console.log(response);
+        }
+        return response || fetch(event.request);
+      })
+
+      .catch(err => {
+        return new Response('Uh oh, that totally failed: ' + err);
+      })
+  );
+  //}
 });
+
+function servePhoto(request) {
+  let storageUrl = request.url.replace(/-\d+px\.jpg$/, '');
+  return caches.open(contentImgsCache).then(cache => {
+    return cache.match(storageUrl).then(response => {
+      const networkFetch = fetch(request).then(networkResponse => {
+        cache.put(storageUrl, networkResponse.clone());
+        return networkResponse;
+      });
+      return response || networkFetch;
+    });
+  });
+}
+
+function serveAvatar(request) {
+  let storageUrl = request.url.replace(/-\d+x\.jpg$/, '');
+  return caches.match(storageUrl).then(
+    response =>
+      response ||
+      fetch(request).then(response => {
+        return caches.open(contentImgsCache).then(cache => {
+          cache.put(storageUrl, response.clone());
+          return response;
+        });
+      })
+  );
+}
 
 self.addEventListener('message', e => {
   if (e.data.refresh === true) {

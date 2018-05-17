@@ -31,11 +31,46 @@ export default function IndexController(container) {
   this._lostConnectionToast = null;
   this._dbPromise = openDatabase();
   this._registerServiceWorker();
+  this._cleanImageCache();
   var indexController = this;
+  setInterval(function() {
+    indexController._cleanImageCache();
+  }, 1000 * 60 * 5);
   this._showCachedMessages().then(function() {
     indexController._openSocket();
   });
 }
+
+IndexController.prototype._cleanImageCache = function() {
+  this._dbPromise
+    .then(db => {
+      //TODO: open the wittr object store get all messages and get photo urls
+      const tx = db.transaction('wittrs');
+      const wittrStore = tx.objectStore('wittrs');
+      return wittrStore.getAll();
+    })
+    .then(messages => {
+      const photos = [];
+      messages.forEach(message => {
+        if(message.photo){
+          photos.push(message.photo);
+        }
+        photos.push(message.avatar);
+      });
+        
+
+      caches.open('wittr-content-imgs').then(cache => {
+        cache.keys().then(keys => {
+          keys.forEach(key => {
+            var keyUrl = new URL(key.url);
+            if (!photos.includes(keyUrl.pathname)) {
+              cache.delete(key);
+            }
+          });
+        });
+      });
+    });
+};
 
 //register serviceworker
 IndexController.prototype._registerServiceWorker = function() {
@@ -179,9 +214,46 @@ IndexController.prototype._onSocketMessage = function(data) {
       const tx = db.transaction('wittrs', 'readwrite');
       const wittrStore = tx.objectStore('wittrs');
       messages.forEach(message => wittrStore.put(message));
-      return tx.complete;
+
+      //TODO: keep only the 30 newest entries in wittrs but delete the rest
+      const dateIndex = wittrStore.index('by-date');
+      return (
+        dateIndex
+          .openCursor(null, 'prev')
+          .then(cursor => {
+            return cursor.advance(30);
+            /**
+             * My version of the code, it works but is super ugly
+             */
+            // console.log('added messages to wittrstore');
+            // var count = 0;
+            // console.log('first time cursoring', ++count);
+            // function iterateCursor(cursor) {
+            //   if (!cursor) return;
+            //   count++;
+            //   console.log('recursively cursoring at: ', count);
+            //   if (count < 28) {
+            //     count = 28;
+            //     cursor.advance(29).then(iterateCursor);
+            //   } else {
+            //     console.log('cursored at: ', cursor.value);
+            //     //we are past the latest 30 entries so delete items
+            //     cursor.delete();
+            //     return cursor.continue().then(iterateCursor);
+            //   }
+            // }
+            // return cursor.continue().then(iterateCursor);
+          })
+          //adding a then after cursoring past the first 30 posts
+          .then(function iterateCursor(cursor) {
+            //we want to delete everything from here on
+            if (!cursor) return;
+            cursor.delete();
+            return cursor.continue().then(iterateCursor);
+          })
+      );
     })
-    .then(() => console.log('added messages to wittrstore'));
+    .then(() => console.log('added messages to database'));
   this._postsView.addPosts(messages);
 };
 
@@ -207,7 +279,7 @@ IndexController.prototype._showCachedMessages = function() {
     .then(messages => {
       if (messages) {
         messages.sort((a, b) => new Date(b.time) - new Date(a.time));
-        console.log(messages);
+        //console.log(messages);
         indexController._postsView.addPosts(messages);
       }
       return;
